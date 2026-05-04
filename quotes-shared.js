@@ -30,6 +30,8 @@ const SUPPLIER_FIELDS = [
   'bankName',
   'bankAccountNo',
   'vatPercent',
+  /** 담당자 옆 표시용 PNG 데이터 URL */
+  'contactSignature',
 ];
 
 function defaultSupplier() {
@@ -45,6 +47,7 @@ function defaultSupplier() {
     bankName: '',
     bankAccountNo: '',
     vatPercent: '10',
+    contactSignature: '',
   };
 }
 
@@ -256,6 +259,7 @@ function cloudPayloadFromState(state) {
       state.vatPercent != null && String(state.vatPercent).trim() !== ''
         ? String(state.vatPercent).trim()
         : '10',
+    contactSignature: state.contactSignature ?? '',
   };
 }
 

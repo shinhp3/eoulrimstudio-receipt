@@ -119,6 +119,163 @@ function bankAccountDisplayFromState(state) {
   return String(state.bankAccount || '').trim();
 }
 
+function safeContactSignatureDataUrl(raw) {
+  const u = String(raw ?? '').trim().replace(/\s+/g, '');
+  if (
+    u.startsWith('data:image/png;base64,') ||
+    u.startsWith('data:image/jpeg;base64,') ||
+    u.startsWith('data:image/jpg;base64,')
+  ) {
+    return u.replace(/"/g, '');
+  }
+  return '';
+}
+
+/** 미리보기 공급자 칸 — 담당자 이름 + 서명 이미지 */
+function supplierContactCellHtml(state) {
+  const name = escapeHtml(state.contact || '');
+  const url = safeContactSignatureDataUrl(state.contactSignature);
+  if (!url) return name;
+  const img =
+    '<span class="supplier-sign-wrap"><img class="supplier-sign-img" src="' +
+    url +
+    '" alt="" role="presentation" /></span>';
+  return name ? `${name} ${img}` : img;
+}
+
+function isSignatureCanvasBlank(canvas) {
+  const ctx = canvas.getContext('2d');
+  if (!ctx || canvas.width < 2 || canvas.height < 2) return true;
+  const { data } = ctx.getImageData(0, 0, canvas.width, canvas.height);
+  for (let i = 0; i < data.length; i += 16) {
+    const r = data[i];
+    const g = data[i + 1];
+    const b = data[i + 2];
+    const a = data[i + 3];
+    if (a < 48) continue;
+    if (r < 248 && g < 248 && b < 248) return false;
+    if (r + g + b < 740) return false;
+  }
+  return true;
+}
+
+function syncSupplierSignatureToHidden(root) {
+  const modal = root.querySelector('#supplier-modal');
+  const canvas = modal?.querySelector('#modal-signature-canvas');
+  const hid = modal?.querySelector('[data-supplier-f="contactSignature"]');
+  if (!canvas || !hid || !canvas.getContext('2d')) return;
+  if (isSignatureCanvasBlank(canvas)) hid.value = '';
+  else hid.value = canvas.toDataURL('image/png');
+}
+
+function bindSupplierSignaturePad(root) {
+  const modal = root.querySelector('#supplier-modal');
+  const canvas = modal?.querySelector('#modal-signature-canvas');
+  const hid = modal?.querySelector('[data-supplier-f="contactSignature"]');
+  const clearBtn = modal?.querySelector('#modal-signature-clear');
+  if (!canvas || !hid) return;
+
+  const ctx = canvas.getContext('2d');
+  const CSS_W = 320;
+  const CSS_H = 120;
+
+  function setupCtx() {
+    const dpr = Math.min(2, window.devicePixelRatio || 1);
+    canvas.style.width = `${CSS_W}px`;
+    canvas.style.height = `${CSS_H}px`;
+    canvas.style.touchAction = 'none';
+    canvas.width = Math.round(CSS_W * dpr);
+    canvas.height = Math.round(CSS_H * dpr);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.scale(dpr, dpr);
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#0f172a';
+    ctx.lineWidth = 2;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, CSS_W, CSS_H);
+  }
+
+  function redrawFromHidden() {
+    setupCtx();
+    const url = String(hid.value || '').trim().replace(/\s+/g, '');
+    if (!safeContactSignatureDataUrl(url)) return;
+    const img = new Image();
+    img.onload = () => {
+      try {
+        ctx.drawImage(img, 0, 0, CSS_W, CSS_H);
+      } catch (_) {
+        setupCtx();
+      }
+    };
+    img.onerror = () => setupCtx();
+    img.src = url;
+  }
+
+  setupCtx();
+
+  let drawing = false;
+  let lastX = 0;
+  let lastY = 0;
+
+  function pos(ev) {
+    const r = canvas.getBoundingClientRect();
+    const cx = ev.clientX ?? ev.touches?.[0]?.clientX ?? 0;
+    const cy = ev.clientY ?? ev.touches?.[0]?.clientY ?? 0;
+    return { x: cx - r.left, y: cy - r.top };
+  }
+
+  canvas.addEventListener('pointerdown', (e) => {
+    if (e.button !== undefined && e.button !== 0) return;
+    drawing = true;
+    try {
+      canvas.setPointerCapture(e.pointerId);
+    } catch (_) {
+      /* ignore */
+    }
+    const { x, y } = pos(e);
+    lastX = x;
+    lastY = y;
+    ctx.fillStyle = '#0f172a';
+    ctx.beginPath();
+    ctx.arc(x, y, ctx.lineWidth / 2, 0, Math.PI * 2);
+    ctx.fill();
+  });
+
+  canvas.addEventListener('pointermove', (e) => {
+    if (!drawing) return;
+    const { x, y } = pos(e);
+    ctx.strokeStyle = '#0f172a';
+    ctx.beginPath();
+    ctx.moveTo(lastX, lastY);
+    ctx.lineTo(x, y);
+    ctx.stroke();
+    lastX = x;
+    lastY = y;
+  });
+
+  function endStroke(e) {
+    if (!drawing) return;
+    drawing = false;
+    try {
+      if (e.pointerId != null) canvas.releasePointerCapture(e.pointerId);
+    } catch (_) {
+      /* ignore */
+    }
+  }
+
+  canvas.addEventListener('pointerup', endStroke);
+  canvas.addEventListener('pointercancel', endStroke);
+
+  clearBtn?.addEventListener('click', () => {
+    hid.value = '';
+    setupCtx();
+  });
+
+  root._supplierSignatureUi = { redrawFromHidden };
+  redrawFromHidden();
+}
+
 function normalizeVatPercent(raw) {
   if (raw == null || String(raw).trim() === '') return 10;
   const r = parseNum(raw);
@@ -343,6 +500,7 @@ function mergeSupplierIntoState(base, root) {
     bankName: hasQuoteBank ? base.bankName : s.bankName,
     bankAccountNo: hasQuoteBank ? base.bankAccountNo : s.bankAccountNo,
     vatPercent,
+    contactSignature: s.contactSignature ?? '',
   };
 }
 
@@ -389,6 +547,7 @@ const QUOTE_SUPPLIER_COMP_KEYS = [
   'bankName',
   'bankAccountNo',
   'vatPercent',
+  'contactSignature',
 ];
 
 function quoteDraftComparable(root) {
@@ -715,7 +874,7 @@ function renderQuotePreview(el, state) {
           <div class="sg-label">소 재 지</div><div>${escapeHtml(state.address || '')}</div>
           <div class="sg-label">업 태</div><div>${escapeHtml(state.bizType || '')}</div>
           <div class="sg-label">종 목</div><div>${escapeHtml(state.bizItem || '')}</div>
-          <div class="sg-label">담 당 자</div><div>${escapeHtml(state.contact || '')}</div>
+          <div class="sg-label">담 당 자</div><div class="supplier-contact-cell">${supplierContactCellHtml(state)}</div>
           <div class="sg-label">전화번호</div><div>${escapeHtml(state.phone || '')}</div>
         </div>
       </div>
@@ -766,6 +925,15 @@ function supplierModalMarkup() {
           <div class="field"><label for="modal-companyName">상호</label><input id="modal-companyName" data-supplier-f="companyName" type="text" value="${escapeHtml(s.companyName)}" /></div>
           <div class="field"><label for="modal-ceo">대표자</label><input id="modal-ceo" data-supplier-f="ceo" type="text" value="${escapeHtml(s.ceo)}" /></div>
           <div class="field"><label for="modal-contact">담당자</label><input id="modal-contact" data-supplier-f="contact" type="text" value="${escapeHtml(s.contact)}" /></div>
+          <div class="field field-full field-signature-block">
+            <label for="modal-signature-canvas">담당자 서명</label>
+            <p class="signature-hint">아래 판에 마우스나 손가락으로 서명하세요.</p>
+            <div class="signature-pad-wrap">
+              <canvas id="modal-signature-canvas" aria-label="서명 판"></canvas>
+            </div>
+            <input type="hidden" id="modal-contactSignature" data-supplier-f="contactSignature" value="" />
+            <button type="button" class="btn btn-secondary btn-signature-clear" id="modal-signature-clear">서명 지우기</button>
+          </div>
           <div class="field"><label for="modal-phone">전화번호</label><input id="modal-phone" data-supplier-f="phone" type="text" value="${escapeHtml(s.phone)}" /></div>
           <div class="field"><label for="modal-bankName">은행명</label><input id="modal-bankName" data-supplier-f="bankName" type="text" value="${escapeHtml(s.bankName)}" placeholder="예: 국민은행" /></div>
           <div class="field"><label for="modal-bankAccountNo">계좌번호</label><input id="modal-bankAccountNo" data-supplier-f="bankAccountNo" type="text" value="${escapeHtml(s.bankAccountNo)}" placeholder="숫자만 또는 하이픈 포함" /></div>
@@ -968,6 +1136,7 @@ function openSupplierModal(root) {
     const k = inp.getAttribute('data-supplier-f');
     if (k) inp.value = s[k] ?? '';
   });
+  root._supplierSignatureUi?.redrawFromHidden?.();
   modal.classList.remove('is-hidden');
   modal.setAttribute('aria-hidden', 'false');
   clearPreviewFocus(root);
@@ -1245,6 +1414,7 @@ function renderForm(root, state, onChange) {
   });
 
   root.querySelector('#supplier-save').addEventListener('click', () => {
+    syncSupplierSignatureToHidden(root);
     const modal = root.querySelector('#supplier-modal');
     const collected = collectSupplierFromModal(modal);
     saveSupplierDefaults(collected);
@@ -1266,6 +1436,8 @@ function renderForm(root, state, onChange) {
   ['#supplier-close', '#supplier-modal-x'].forEach((sel) => {
     root.querySelector(sel)?.addEventListener('click', () => closeSupplierModal(root));
   });
+
+  bindSupplierSignaturePad(root);
 
   root.querySelector('#save-quote-modal-x')?.addEventListener('click', () => closeSaveQuoteModal(root));
   root.querySelector('#save-quote-cancel')?.addEventListener('click', () => closeSaveQuoteModal(root));

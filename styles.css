@@ -1512,6 +1512,55 @@ h1.app-title {
   margin-bottom: 16px;
 }
 
+.field-signature-block .signature-hint {
+  margin: 4px 0 10px;
+  font-size: 12px;
+  color: #64748b;
+  line-height: 1.35;
+}
+
+.signature-pad-wrap {
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  background: #fff;
+  overflow: hidden;
+  margin-bottom: 10px;
+}
+
+.signature-pad-wrap canvas {
+  display: block;
+  vertical-align: top;
+  cursor: crosshair;
+}
+
+.btn-signature-clear {
+  font-size: 13px;
+}
+
+.supplier-contact-cell {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 10px;
+  font-size: 12px;
+}
+
+.supplier-sign-wrap {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.supplier-sign-img {
+  display: block;
+  max-height: 36px;
+  max-width: 120px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
+  vertical-align: middle;
+}
+
 .modal-actions {
   display: flex;
   justify-content: flex-end;
