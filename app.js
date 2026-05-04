@@ -1,24 +1,10 @@
-/* 전역: html2canvas, window.jspdf.jsPDF (UMD) */
+/* 전역: html2canvas, window.jspdf.jsPDF (UMD) — quotes-shared.js 를 먼저 로드 */
 
-const STORAGE_KEY = 'eoulrim-quote-draft-v1';
 const SUPPLIER_KEY = 'eoulrim-supplier-defaults-v1';
 const TABLE_BODY_ROWS = 14;
 
 function getJsPDF() {
   return window.jspdf && window.jspdf.jsPDF;
-}
-
-function defaultSupplier() {
-  return {
-    bizNo: '',
-    companyName: '',
-    ceo: '',
-    address: '',
-    bizType: '',
-    bizItem: '',
-    contact: '',
-    phone: '',
-  };
 }
 
 function loadSupplierDefaults() {
@@ -33,17 +19,6 @@ function loadSupplierDefaults() {
 
 function saveSupplierDefaults(s) {
   localStorage.setItem(SUPPLIER_KEY, JSON.stringify({ ...defaultSupplier(), ...s }));
-}
-
-function defaultState() {
-  return {
-    dispatchNo: '',
-    issueDate: new Date().toISOString().slice(0, 10),
-    validityDays: '',
-    bankAccount: '',
-    notes: '',
-    lines: [{ name: '', qty: '', unitPrice: '' }],
-  };
 }
 
 /** 견적 초안에 예전 형식으로 공급자가 들어 있으면 한 번만 기본값 저장소로 옮김 */
@@ -99,14 +74,6 @@ function lineComputed(qtyRaw, unitRaw) {
   return { supply, vat, amount };
 }
 
-function escapeHtml(s) {
-  return String(s)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
-}
-
 function loadState() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
@@ -147,8 +114,9 @@ function saveState(state) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(slim));
 }
 
-function mergeSupplierIntoState(base) {
-  const s = loadSupplierDefaults();
+function mergeSupplierIntoState(base, root) {
+  const embed = root && root._embeddedSupplier;
+  const s = embed ? { ...defaultSupplier(), ...embed } : loadSupplierDefaults();
   return {
     ...base,
     bizNo: s.bizNo,
@@ -180,7 +148,7 @@ function collectStateFromDom(root) {
     notes: q('[data-field="notes"]')?.value ?? '',
     lines,
   };
-  return mergeSupplierIntoState(quote);
+  return mergeSupplierIntoState(quote, root);
 }
 
 /** 미리보기 패널 안에서 견적서 전체가 보이도록 비율 축소(내부 스크롤 없음) */
@@ -218,6 +186,26 @@ function fitQuotePreview(root) {
   slot.style.overflow = 'hidden';
   slot.style.marginLeft = 'auto';
   slot.style.marginRight = 'auto';
+}
+
+/** 품목 칸 입력 중에는 미리보기 스케일·줌 리셋을 줄여 깜빡임 완화 */
+function isTypingPreviewLineItem(root) {
+  const ae = document.activeElement;
+  return (
+    ae &&
+    root.contains(ae) &&
+    ae.closest('[data-line-row]') &&
+    ae.matches?.('input[data-f]')
+  );
+}
+
+function scheduleFitQuotePreview(root) {
+  if (!root) return;
+  clearTimeout(root._fitPreviewDebounce);
+  root._fitPreviewDebounce = setTimeout(() => {
+    root._fitPreviewDebounce = null;
+    fitQuotePreview(root);
+  }, 140);
 }
 
 function unwrapQuoteFitForCapture(root) {
@@ -477,10 +465,17 @@ function supplierModalMarkup() {
   `;
 }
 
+function supplierForUi(root) {
+  if (root && root._embeddedSupplier != null) {
+    return { ...defaultSupplier(), ...root._embeddedSupplier };
+  }
+  return loadSupplierDefaults();
+}
+
 function updateSupplierStrip(root) {
   const el = root.querySelector('#supplier-strip-summary');
   if (!el) return;
-  const s = loadSupplierDefaults();
+  const s = supplierForUi(root);
   const name = (s.companyName || '').trim();
   el.textContent = name || '미설정 · 설정에서 입력';
 }
@@ -497,7 +492,7 @@ function collectSupplierFromModal(modal) {
 function openSupplierModal(root) {
   const modal = root.querySelector('#supplier-modal');
   if (!modal) return;
-  const s = loadSupplierDefaults();
+  const s = supplierForUi(root);
   modal.querySelectorAll('[data-supplier-f]').forEach((inp) => {
     const k = inp.getAttribute('data-supplier-f');
     if (k) inp.value = s[k] ?? '';
@@ -550,7 +545,8 @@ function renderForm(root, state, onChange) {
   };
   root.addEventListener('focusout', root._focusOutHandler);
 
-  const supplierSummary = (loadSupplierDefaults().companyName || '').trim() || '미설정 · 설정에서 입력';
+  const supplierSummary =
+    (supplierForUi(root).companyName || '').trim() || '미설정 · 설정에서 입력';
 
   const linesHtml = state.lines
     .map(
@@ -570,7 +566,7 @@ function renderForm(root, state, onChange) {
   root.innerHTML = `
     <div class="page-wrap">
       <h1 class="app-title">견적서 작성</h1>
-      <p class="lead">입력하면 오른쪽 미리보기에 바로 반영됩니다. 공급자는 우측 상단 ⚙에서 저장해 두면 매 견적에 기본으로 적용됩니다.</p>
+      <p class="lead">입력하면 오른쪽 미리보기에 바로 반영됩니다. <strong>저장</strong>은 항상 서버로 올라가며, 필수 항목이 비어 있으면 목록에 <strong>미작성</strong>으로 표시됩니다. 공급자는 ⚙에서 저장해 두면 기본으로 적용됩니다.</p>
 
       <div class="workspace">
         <div class="workspace-main">
@@ -625,11 +621,14 @@ function renderForm(root, state, onChange) {
         <aside class="workspace-preview">
           <div class="preview-toolbar panel">
             <button type="button" class="btn btn-primary" id="btn-save">저장</button>
-            <button type="button" class="btn btn-secondary" id="btn-load">불러오기</button>
             <button type="button" class="btn btn-primary" id="btn-pdf">PDF</button>
             <button type="button" class="btn btn-secondary" id="btn-png">PNG</button>
             <button type="button" class="btn btn-ghost" id="btn-print">인쇄</button>
-            <p class="toolbar-note">견적 내용만 저장됩니다. 공급자는 설정에 따로 저장됩니다.</p>
+            <p class="toolbar-note">
+              <strong>저장</strong>은 항상 서버(GitHub <code class="inline-code">quotes/</code>)에 올립니다.
+              발송번호·공급자 상호·품목이 채워지면 <strong>완료</strong>, 아니면 <strong>미작성</strong>으로 표시됩니다.
+              대시보드에서 연 파일은 같은 이름으로 덮어씁니다.
+            </p>
           </div>
           <div class="preview-section panel preview-panel">
             <h2 class="preview-heading">미리보기</h2>
@@ -657,7 +656,9 @@ function renderForm(root, state, onChange) {
 
   root.querySelector('#supplier-save').addEventListener('click', () => {
     const modal = root.querySelector('#supplier-modal');
-    saveSupplierDefaults(collectSupplierFromModal(modal));
+    const collected = collectSupplierFromModal(modal);
+    saveSupplierDefaults(collected);
+    root._embeddedSupplier = { ...defaultSupplier(), ...collected };
     updateSupplierStrip(root);
     closeSupplierModal(root);
     onChange();
@@ -705,16 +706,29 @@ function renderForm(root, state, onChange) {
     });
   });
 
-  root.querySelector('#btn-save').addEventListener('click', () => {
-    const s = collectStateFromDom(root);
-    saveState(s);
-    alert('저장했습니다.');
-  });
-
-  root.querySelector('#btn-load').addEventListener('click', () => {
-    const s = loadState();
-    mountApp(document.getElementById('app'), s);
-    alert('불러왔습니다.');
+  root.querySelector('#btn-save').addEventListener('click', async () => {
+    const loadingEl = () => document.getElementById('export-loading');
+    try {
+      assertCloudApiConfigured();
+    } catch (err) {
+      alert(err.message || String(err));
+      return;
+    }
+    loadingEl()?.classList.add('active');
+    try {
+      const s = collectStateFromDom(root);
+      const fileName = root._cloudQuoteFileName || suggestedQuoteFileName(s);
+      const payload = cloudPayloadFromState(s);
+      await putCloudQuote(fileName, payload);
+      saveState(s);
+      if (!root._cloudQuoteFileName) root._cloudQuoteFileName = fileName;
+      const stLabel = payload.quoteStatusLabel || (payload.quoteComplete ? '완료' : '미작성');
+      alert(`저장했습니다. [${stLabel}]\n${fileName}`);
+    } catch (e) {
+      alert(`저장에 실패했습니다.\n${e.message || e}`);
+    } finally {
+      loadingEl()?.classList.remove('active');
+    }
   });
 
   root.querySelector('#btn-print').addEventListener('click', () => {
@@ -819,7 +833,11 @@ async function exportPng(root) {
   }
 }
 
-function mountApp(mountEl, initialState) {
+/**
+ * @param {object|null|undefined} sessionMeta — null/undefined 이면 서버 파일 연결 해제
+ * @param {{ cloudFileName?: string|null }} [sessionMeta]
+ */
+function mountApp(mountEl, initialState, sessionMeta) {
   if (mountEl._supplierEsc) {
     document.removeEventListener('keydown', mountEl._supplierEsc);
     mountEl._supplierEsc = null;
@@ -832,34 +850,47 @@ function mountApp(mountEl, initialState) {
     window.removeEventListener('resize', mountEl._quoteFitOnResize);
     mountEl._quoteFitOnResize = null;
   }
+  clearTimeout(mountEl._fitPreviewDebounce);
+  mountEl._fitPreviewDebounce = null;
 
-  const state = initialState || loadState();
+  if (sessionMeta === undefined || sessionMeta === null) {
+    mountEl._cloudQuoteFileName = null;
+  } else {
+    mountEl._cloudQuoteFileName =
+      sessionMeta.cloudFileName !== undefined ? sessionMeta.cloudFileName : null;
+  }
+
+  const mergedInitial = initialState || loadState();
+  mountEl._embeddedSupplier = supplierEmbeddingFromPayload(mergedInitial);
+
+  const state = mergedInitial;
 
   const refresh = () => {
     const s = collectStateFromDom(mountEl);
+    const preserveLineZoom = isTypingPreviewLineItem(mountEl);
     renderQuotePreview(mountEl.querySelector('#quote-print-root'), s);
-    stripPreviewZoomTransform(mountEl);
+    if (!preserveLineZoom) stripPreviewZoomTransform(mountEl);
     updateComputedCells(mountEl);
     updateSupplierStrip(mountEl);
-    requestAnimationFrame(() => {
+    if (!preserveLineZoom) {
       requestAnimationFrame(() => {
-        fitQuotePreview(mountEl);
-        const ae = document.activeElement;
-        if (ae && mountEl.contains(ae)) syncPreviewFocus(mountEl, ae);
+        requestAnimationFrame(() => {
+          const ae = document.activeElement;
+          if (ae && mountEl.contains(ae)) syncPreviewFocus(mountEl, ae);
+        });
       });
-    });
+    }
+    scheduleFitQuotePreview(mountEl);
   };
 
   renderForm(mountEl, state, refresh);
   refresh();
+  fitQuotePreview(mountEl);
 
   const stage = mountEl.querySelector('#quote-fit-stage');
   const quoteScroll = mountEl.querySelector('.quote-scroll');
   const refitPreview = () => {
-    fitQuotePreview(mountEl);
-    mountEl._previewZoomKey = null;
-    const ae = document.activeElement;
-    if (ae && mountEl.contains(ae)) syncPreviewFocus(mountEl, ae);
+    scheduleFitQuotePreview(mountEl);
   };
   if (typeof ResizeObserver !== 'undefined') {
     mountEl._quoteFitRo = new ResizeObserver(refitPreview);
@@ -877,4 +908,174 @@ function mountApp(mountEl, initialState) {
   document.addEventListener('keydown', mountEl._supplierEsc);
 }
 
-mountApp(document.getElementById('app'));
+async function fetchDashboardServerRows() {
+  const wrap = document.getElementById('server-table-wrap');
+  const status = document.getElementById('dashboard-status');
+  if (!wrap) return;
+
+  if (!CLOUD_API_BASE) {
+    wrap.innerHTML =
+      '<p class="dashboard-empty">Worker 주소가 비어 있습니다. HTML에서 window.__EOULRIM_UPLOAD_API__를 설정해 주세요.</p>';
+    if (status) status.textContent = '';
+    return;
+  }
+
+  wrap.innerHTML = '<p class="dashboard-muted">목록 불러오는 중…</p>';
+  try {
+    const items = await listCloudQuotes();
+    if (!items.length) {
+      wrap.innerHTML =
+        '<p class="dashboard-empty">서버에 저장된 견적이 없습니다. 작성 탭에서 「서버 저장」을 사용해 보세요.</p>';
+      if (status) status.textContent = '';
+      return;
+    }
+
+    const metas = await Promise.all(
+      items.map(async (it) => {
+        try {
+          const data = await getCloudQuote(it.name);
+          const savedAt = data.savedAt || data.serverSavedDate || '';
+          const issue = data.issueDate || '';
+          const dispatch = data.dispatchNo || '';
+          const statusLabel = quoteStatusLabelFromPayload(data);
+          return { name: it.name, savedAt, issue, dispatch, statusLabel };
+        } catch {
+          return {
+            name: it.name,
+            savedAt: '',
+            issue: '',
+            dispatch: '',
+            statusLabel: '—',
+            err: true,
+          };
+        }
+      }),
+    );
+
+    metas.sort((a, b) => String(b.savedAt).localeCompare(String(a.savedAt)));
+
+    const rows = metas
+      .map((m) => {
+        const title = m.dispatch || m.name.replace(/\.json$/i, '');
+        const enc = encodeURIComponent(m.name);
+        const stClass =
+          m.statusLabel === '미작성'
+            ? 'dashboard-status-pill is-incomplete'
+            : 'dashboard-status-pill is-complete';
+        return `<tr>
+            <td><button type="button" class="dashboard-link-btn dashboard-open-cloud" data-quote-file="${enc}">${escapeHtml(title)}</button></td>
+            <td class="dashboard-meta"><span class="${stClass}">${escapeHtml(m.statusLabel)}</span></td>
+            <td class="dashboard-meta">${escapeHtml(fmtIssueDateKo(m.issue))}</td>
+            <td class="dashboard-meta">${escapeHtml(fmtSavedAtKo(m.savedAt))}</td>
+            <td class="dashboard-meta muted">${escapeHtml(m.name)}${m.err ? ' (메타 불완전)' : ''}</td>
+          </tr>`;
+      })
+      .join('');
+
+    wrap.innerHTML = `
+        <table class="dashboard-table">
+          <thead>
+            <tr><th>견적</th><th>상태</th><th>발행일</th><th>서버 저장 시각</th><th>파일</th></tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>`;
+    if (status) status.textContent = '';
+  } catch (e) {
+    wrap.innerHTML = '<p class="dashboard-empty">서버 목록을 불러오지 못했습니다.</p>';
+    if (status) status.textContent = e.message || String(e);
+  }
+}
+
+function switchMainTab(which) {
+  const writeBtn = document.getElementById('tab-write-btn');
+  const dashBtn = document.getElementById('tab-dash-btn');
+  const panelWrite = document.getElementById('panel-write');
+  const panelDash = document.getElementById('panel-dashboard');
+  if (!writeBtn || !dashBtn || !panelWrite || !panelDash) return;
+
+  const isWrite = which === 'write';
+
+  panelWrite.classList.toggle('tab-panel-active', isWrite);
+  panelWrite.classList.toggle('tab-panel-hidden', !isWrite);
+  panelDash.classList.toggle('tab-panel-active', !isWrite);
+  panelDash.classList.toggle('tab-panel-hidden', isWrite);
+  panelDash.setAttribute('aria-hidden', isWrite ? 'true' : 'false');
+  writeBtn.setAttribute('aria-selected', String(isWrite));
+  dashBtn.setAttribute('aria-selected', String(!isWrite));
+
+  if (!isWrite) {
+    fetchDashboardServerRows();
+  } else {
+    const mountEl = document.getElementById('app');
+    if (mountEl && mountEl.querySelector('#quote-fit-stage')) {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => fitQuotePreview(mountEl));
+      });
+    }
+  }
+}
+
+function initMainTabs() {
+  const dashPanel = document.getElementById('panel-dashboard');
+  document.getElementById('tab-write-btn')?.addEventListener('click', () => switchMainTab('write'));
+  document.getElementById('tab-dash-btn')?.addEventListener('click', () => switchMainTab('dashboard'));
+  document.getElementById('btn-refresh-server')?.addEventListener('click', () => {
+    fetchDashboardServerRows();
+  });
+  document.getElementById('btn-new-quote')?.addEventListener('click', () => {
+    mountApp(document.getElementById('app'), defaultState(), null);
+    switchMainTab('write');
+  });
+
+  dashPanel?.addEventListener('click', (e) => {
+    const openCloud = e.target.closest('.dashboard-open-cloud');
+    if (openCloud) {
+      const enc = openCloud.getAttribute('data-quote-file');
+      const fileName = enc ? decodeURIComponent(enc) : '';
+      if (!fileName) return;
+      if (!CLOUD_API_BASE) {
+        alert('Worker 주소를 설정해 주세요.');
+        return;
+      }
+      getCloudQuote(fileName)
+        .then((data) => {
+          mountApp(document.getElementById('app'), stateFromCloudPayload(data), {
+            cloudFileName: fileName,
+          });
+          switchMainTab('write');
+        })
+        .catch((err) => alert(err.message || String(err)));
+    }
+  });
+}
+
+async function bootQuoteEditor() {
+  initMainTabs();
+
+  const mountEl = document.getElementById('app');
+  const params = new URLSearchParams(window.location.search);
+  const cloud = params.get('cloud');
+  if (cloud) {
+    if (!CLOUD_API_BASE) {
+      alert('Worker 주소(window.__EOULRIM_UPLOAD_API__)를 설정한 뒤 다시 열어 주세요.');
+      mountApp(mountEl);
+      switchMainTab(window.location.hash === '#dashboard' ? 'dashboard' : 'write');
+      return;
+    }
+    try {
+      const data = await getCloudQuote(cloud);
+      history.replaceState({}, '', window.location.pathname + window.location.hash);
+      mountApp(mountEl, stateFromCloudPayload(data), { cloudFileName: cloud });
+    } catch (e) {
+      alert(`저장된 견적을 불러오지 못했습니다.\n${e.message || e}`);
+      mountApp(mountEl);
+    }
+    switchMainTab('write');
+    return;
+  }
+
+  mountApp(mountEl);
+  switchMainTab(window.location.hash === '#dashboard' ? 'dashboard' : 'write');
+}
+
+bootQuoteEditor();

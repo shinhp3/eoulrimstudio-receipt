@@ -21,6 +21,110 @@ body {
   line-height: 1.45;
 }
 
+.app-shell-bar {
+  position: sticky;
+  top: 0;
+  z-index: 500;
+  background: linear-gradient(180deg, #f1f5f9 0%, #e2e8f0 100%);
+  border-bottom: 1px solid #cbd5e1;
+  padding: 0 12px;
+}
+
+.main-tabs {
+  display: flex;
+  gap: 4px;
+  max-width: 1680px;
+  margin: 0 auto;
+}
+
+.main-tab {
+  appearance: none;
+  border: none;
+  padding: 12px 22px;
+  margin-bottom: -1px;
+  border-radius: 10px 10px 0 0;
+  font: inherit;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  background: transparent;
+  color: #64748b;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+
+.main-tab:hover {
+  color: var(--accent);
+  background: rgb(255 255 255 / 55%);
+}
+
+.main-tab[aria-selected='true'] {
+  background: var(--paper);
+  color: var(--accent);
+  box-shadow: 0 1px 0 var(--paper);
+}
+
+.tab-panel.tab-panel-hidden {
+  display: none !important;
+}
+
+.tab-panel.tab-panel-active {
+  display: block;
+}
+
+.dashboard-page-embedded {
+  padding-top: 8px;
+}
+
+.dashboard-header-compact {
+  margin-bottom: 16px;
+}
+
+.dashboard-header-compact .dashboard-title {
+  font-size: 1.15rem;
+  margin-bottom: 6px;
+}
+
+.dashboard-header-compact .dashboard-lead {
+  margin-bottom: 12px;
+}
+
+.dashboard-link-btn {
+  appearance: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  color: var(--accent);
+  cursor: pointer;
+  text-align: left;
+}
+
+.dashboard-link-btn:hover {
+  text-decoration: underline;
+}
+
+.dashboard-status-pill {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.dashboard-status-pill.is-complete {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.dashboard-status-pill.is-incomplete {
+  background: #ffedd5;
+  color: #c2410c;
+}
+
 .page-wrap {
   max-width: 1680px;
   margin: 0 auto;
@@ -51,6 +155,12 @@ body {
   overflow: hidden;
 }
 
+.app-shell-body .workspace-preview {
+  top: 8px;
+  height: calc(100vh - 56px);
+  max-height: calc(100vh - 56px);
+}
+
 .preview-toolbar {
   flex-shrink: 0;
   display: flex;
@@ -64,6 +174,89 @@ body {
 .preview-toolbar .toolbar-note {
   width: 100%;
   margin: 4px 0 0;
+  font-size: 11px;
+  color: #64748b;
+  line-height: 1.35;
+}
+
+.preview-toolbar .inline-code {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: #f1f5f9;
+  color: #334155;
+}
+
+.saved-quotes-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid #e2e8f0;
+}
+
+.saved-quotes-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #334155;
+}
+
+.btn-sm {
+  padding: 6px 12px;
+  font-size: 12px;
+}
+
+.saved-quotes-list {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  width: 100%;
+  max-height: min(200px, 28vh);
+  overflow: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+
+.saved-quotes-list li {
+  margin: 0;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.saved-quotes-list li:last-child {
+  border-bottom: none;
+}
+
+.saved-quote-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-size: 12px;
+  color: #0f172a;
+  cursor: pointer;
+  word-break: break-all;
+}
+
+.saved-quote-item:hover {
+  background: #eff6ff;
+  color: var(--accent);
+}
+
+.saved-quotes-empty {
+  padding: 12px 10px;
+  font-size: 12px;
+  color: #64748b;
+}
+
+.saved-quotes-status {
+  margin: 6px 0 0;
   font-size: 11px;
   color: #64748b;
   line-height: 1.35;
@@ -118,6 +311,157 @@ body {
     min-height: 240px;
     height: auto;
   }
+}
+
+.app-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-size: 13px;
+}
+
+.app-nav-link {
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.app-nav-link:hover {
+  text-decoration: underline;
+}
+
+.app-nav-current {
+  color: #64748b;
+  font-weight: 600;
+}
+
+.app-nav-sep {
+  color: #cbd5e1;
+}
+
+.dashboard-body {
+  margin: 0;
+  min-height: 100vh;
+  background: #f1f5f9;
+}
+
+.dashboard-page {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 28px 16px 48px;
+}
+
+.dashboard-header {
+  margin-bottom: 24px;
+}
+
+.dashboard-title {
+  margin: 0 0 8px;
+  font-size: 1.35rem;
+  font-weight: 700;
+}
+
+.dashboard-lead {
+  margin: 0 0 16px;
+  color: #475569;
+  font-size: 0.95rem;
+}
+
+.dashboard-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.dashboard-global-status {
+  margin-bottom: 16px;
+  font-size: 13px;
+  color: #b45309;
+}
+
+.dashboard-section {
+  margin-bottom: 20px;
+}
+
+.dashboard-section-title {
+  margin: 0 0 8px;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.dashboard-section-desc {
+  margin: 0 0 14px;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.dashboard-toolbar {
+  margin-bottom: 10px;
+}
+
+.dashboard-table-wrap {
+  overflow-x: auto;
+}
+
+.dashboard-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.dashboard-table th,
+.dashboard-table td {
+  border: 1px solid #e2e8f0;
+  padding: 10px 12px;
+  text-align: left;
+}
+
+.dashboard-table th {
+  background: #f8fafc;
+  font-weight: 700;
+}
+
+.dashboard-table .dashboard-meta {
+  white-space: nowrap;
+  color: #334155;
+}
+
+.dashboard-table .dashboard-meta.muted {
+  color: #94a3b8;
+  font-size: 12px;
+  word-break: break-all;
+  white-space: normal;
+}
+
+.dashboard-table .dashboard-actions-cell {
+  width: 72px;
+  text-align: right;
+}
+
+.dashboard-link {
+  color: var(--accent);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.dashboard-link:hover {
+  text-decoration: underline;
+}
+
+.dashboard-empty {
+  margin: 0;
+  padding: 16px;
+  background: #f8fafc;
+  border-radius: 8px;
+  color: #64748b;
+  font-size: 13px;
+}
+
+.dashboard-muted {
+  margin: 0;
+  color: #64748b;
+  font-size: 13px;
 }
 
 h1.app-title {
@@ -773,6 +1117,19 @@ h1.app-title {
 @media print {
   body {
     background: #fff;
+  }
+
+  .app-shell-bar,
+  #panel-dashboard {
+    display: none !important;
+  }
+
+  #panel-write.tab-panel-hidden {
+    display: none !important;
+  }
+
+  #panel-write.tab-panel-active {
+    display: block !important;
   }
 
   .workspace-main,

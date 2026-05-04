@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>견적서 작성</title>
+    <title>견적서</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link
@@ -12,8 +12,82 @@
     />
     <link rel="stylesheet" href="styles.css" />
   </head>
-  <body>
-    <div id="app"></div>
+  <body class="app-shell-body">
+    <header class="app-shell-bar">
+      <div class="main-tabs" role="tablist" aria-label="견적 메뉴">
+        <button
+          type="button"
+          class="main-tab"
+          role="tab"
+          id="tab-write-btn"
+          aria-selected="true"
+          aria-controls="panel-write"
+          data-main-tab="write"
+        >
+          작성
+        </button>
+        <button
+          type="button"
+          class="main-tab"
+          role="tab"
+          id="tab-dash-btn"
+          aria-selected="false"
+          aria-controls="panel-dashboard"
+          data-main-tab="dashboard"
+        >
+          대시보드
+        </button>
+      </div>
+    </header>
+
+    <div
+      id="panel-write"
+      class="tab-panel tab-panel-active"
+      role="tabpanel"
+      aria-labelledby="tab-write-btn"
+    >
+      <div id="app"></div>
+    </div>
+
+    <div
+      id="panel-dashboard"
+      class="tab-panel tab-panel-hidden"
+      role="tabpanel"
+      aria-labelledby="tab-dash-btn"
+      aria-hidden="true"
+    >
+      <div class="dashboard-page dashboard-page-embedded">
+        <div class="dashboard-header dashboard-header-compact">
+          <h2 class="dashboard-title">대시보드</h2>
+          <p class="dashboard-lead">
+            서버에 저장된 견적을 열고, 상태(완료 / 미작성)를 확인할 수 있습니다.
+          </p>
+          <div class="dashboard-actions">
+            <button type="button" class="btn btn-primary" id="btn-new-quote">
+              새 견적 작성
+            </button>
+            <button type="button" class="btn btn-secondary" id="btn-refresh-server">
+              서버 목록 새로고침
+            </button>
+          </div>
+        </div>
+
+        <div id="dashboard-status" class="dashboard-global-status" role="status"></div>
+
+        <section class="dashboard-section panel" aria-labelledby="server-heading">
+          <h3 id="server-heading" class="dashboard-section-title">저장된 견적</h3>
+          <p class="dashboard-section-desc">
+            상태는 저장 시점 기준입니다(발송번호·공급자 상호·품목 충족 시 <strong>완료</strong>).
+          </p>
+          <div id="server-table-wrap" class="dashboard-table-wrap"></div>
+        </section>
+      </div>
+    </div>
+
+    <script>
+      window.__EOULRIM_UPLOAD_API__ = '';
+    </script>
+    <script src="quotes-shared.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.2/dist/jspdf.umd.min.js"></script>
     <script src="app.js"></script>

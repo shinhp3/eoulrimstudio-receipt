@@ -1,0 +1,20 @@
+name = "eoulrimstudio-upload"
+main = "src/index.js"
+compatibility_date = "2024-10-01"
+
+# ── 배포 전 설정 ─────────────────────────────────────────────
+# 시크릿: npx wrangler secret put GITHUB_TOKEN
+#
+# 저장소 지정 (둘 중 하나):
+#   [vars] 에 GITHUB_REPOSITORY = "owner/repo"   ← 한 줄로 넣기 권장
+#   또는 GITHUB_USERNAME + 아래 GITHUB_REPO
+#
+# 대시보드 Workers → 해당 Worker → Settings → Variables 에서도 동일하게 넣을 수 있습니다.
+
+[vars]
+# 한 줄로 넣으려면: GITHUB_REPOSITORY = "내계정/eoulrimstudio-receipt"
+GITHUB_REPOSITORY = ""
+GITHUB_USERNAME = ""
+GITHUB_REPO = "eoulrimstudio-receipt"
+GITHUB_BRANCH = "main"
+QUOTES_PREFIX = "quotes"
