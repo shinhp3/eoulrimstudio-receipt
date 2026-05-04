@@ -29,6 +29,7 @@ const SUPPLIER_FIELDS = [
   'phone',
   'bankName',
   'bankAccountNo',
+  'vatPercent',
 ];
 
 function defaultSupplier() {
@@ -43,6 +44,7 @@ function defaultSupplier() {
     phone: '',
     bankName: '',
     bankAccountNo: '',
+    vatPercent: '10',
   };
 }
 
@@ -250,6 +252,10 @@ function cloudPayloadFromState(state) {
     bizItem: state.bizItem ?? '',
     contact: state.contact ?? '',
     phone: state.phone ?? '',
+    vatPercent:
+      state.vatPercent != null && String(state.vatPercent).trim() !== ''
+        ? String(state.vatPercent).trim()
+        : '10',
   };
 }
 

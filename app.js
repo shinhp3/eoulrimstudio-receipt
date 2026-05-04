@@ -75,6 +75,12 @@ function migrateDraftSupplierIfNeeded(parsed) {
       bankName = sp.bankName;
       bankAccountNo = sp.bankAccountNo;
     }
+    let vatPercent = String(parsed.vatPercent ?? '').trim();
+    if (!vatPercent && Array.isArray(parsed.lines) && parsed.lines.length) {
+      const fp = normalizeVatPercent(parsed.lines[0].vatPercent);
+      if (parsed.lines.every((l) => normalizeVatPercent(l.vatPercent) === fp)) vatPercent = String(fp);
+    }
+    if (!vatPercent) vatPercent = '10';
     saveSupplierDefaults({
       bizNo: parsed.bizNo ?? '',
       companyName: parsed.companyName ?? '',
@@ -86,6 +92,7 @@ function migrateDraftSupplierIfNeeded(parsed) {
       phone: parsed.phone ?? '',
       bankName,
       bankAccountNo,
+      vatPercent,
     });
   }
 }
@@ -117,6 +124,24 @@ function normalizeVatPercent(raw) {
   const r = parseNum(raw);
   if (!Number.isFinite(r) || r < 0) return 10;
   return r;
+}
+
+/** 품목표 헤더용 — 채워진 행의 부가세율이 모두 같으면 (10%) 등, 없거나 다르면 (%) */
+function vatColumnTitleSuffixHtml(lines, spanClassName) {
+  const keys = [];
+  for (const ln of Array.isArray(lines) ? lines : []) {
+    const { supply } = lineComputed(ln.qty, ln.unitPrice, ln.vatPercent);
+    const hasContent =
+      String(ln.name || '').trim() !== '' ||
+      supply !== 0 ||
+      parseNum(ln.qty) !== 0 ||
+      parseNum(ln.unitPrice) !== 0;
+    if (!hasContent) continue;
+    keys.push(normalizeVatPercent(ln.vatPercent));
+  }
+  const pctInner =
+    keys.length && keys.every((k) => k === keys[0]) ? `${keys[0]}%` : '%';
+  return `<span class="${spanClassName}">(${pctInner})</span>`;
 }
 
 /** 공급가·부가세·금액 (부가세율 % 는 행마다) */
@@ -295,8 +320,18 @@ function mergeSupplierIntoState(base, root) {
   const bnB = String(base.bankName ?? '').trim();
   const baB = String(base.bankAccountNo ?? '').trim();
   const hasQuoteBank = bnB !== '' || baB !== '';
+  let vr = String(s.vatPercent ?? '').trim();
+  if (!vr && Array.isArray(base.lines) && base.lines.length) {
+    const fp = normalizeVatPercent(base.lines[0].vatPercent);
+    if (base.lines.every((l) => normalizeVatPercent(l.vatPercent) === fp)) vr = String(fp);
+  }
+  const vatPercent = vr || '10';
+  const lines = Array.isArray(base.lines)
+    ? base.lines.map((l) => ({ ...l, vatPercent }))
+    : base.lines;
   return {
     ...base,
+    lines,
     bizNo: s.bizNo,
     companyName: s.companyName,
     ceo: s.ceo,
@@ -307,18 +342,20 @@ function mergeSupplierIntoState(base, root) {
     phone: s.phone,
     bankName: hasQuoteBank ? base.bankName : s.bankName,
     bankAccountNo: hasQuoteBank ? base.bankAccountNo : s.bankAccountNo,
+    vatPercent,
   };
 }
 
 function collectStateFromDom(root) {
   const q = (sel) => root.querySelector(sel);
   const lines = [];
+  const vatGlobal = supplierVatPercentFromUi(root);
   root.querySelectorAll('[data-line-row]').forEach((row) => {
     lines.push({
       name: row.querySelector('[data-f="name"]')?.value ?? '',
       qty: row.querySelector('[data-f="qty"]')?.value ?? '',
       unitPrice: row.querySelector('[data-f="unitPrice"]')?.value ?? '',
-      vatPercent: row.querySelector('[data-f="vatPercent"]')?.value ?? '10',
+      vatPercent: vatGlobal,
     });
   });
   const quote = {
@@ -351,6 +388,7 @@ const QUOTE_SUPPLIER_COMP_KEYS = [
   'phone',
   'bankName',
   'bankAccountNo',
+  'vatPercent',
 ];
 
 function quoteDraftComparable(root) {
@@ -690,7 +728,7 @@ function renderQuotePreview(el, state) {
             <th class="col-qty">수량</th>
             <th class="col-price">단가</th>
             <th class="col-supply">공급가액</th>
-            <th class="col-vat">부가세</th>
+            <th class="col-vat">부가세 ${vatColumnTitleSuffixHtml(state.lines, 'th-inline-muted')}</th>
             <th class="col-amt">금액</th>
           </tr>
         </thead>
@@ -731,6 +769,7 @@ function supplierModalMarkup() {
           <div class="field"><label for="modal-phone">전화번호</label><input id="modal-phone" data-supplier-f="phone" type="text" value="${escapeHtml(s.phone)}" /></div>
           <div class="field"><label for="modal-bankName">은행명</label><input id="modal-bankName" data-supplier-f="bankName" type="text" value="${escapeHtml(s.bankName)}" placeholder="예: 국민은행" /></div>
           <div class="field"><label for="modal-bankAccountNo">계좌번호</label><input id="modal-bankAccountNo" data-supplier-f="bankAccountNo" type="text" value="${escapeHtml(s.bankAccountNo)}" placeholder="숫자만 또는 하이픈 포함" /></div>
+          <div class="field"><label for="modal-vatPercent">부가세율 <span class="label-muted">(%)</span></label><input id="modal-vatPercent" data-supplier-f="vatPercent" type="text" inputmode="decimal" value="${escapeHtml(String(s.vatPercent != null && String(s.vatPercent).trim() !== '' ? s.vatPercent : '10'))}" placeholder="10" /></div>
           <div class="field"><label for="modal-bizType">업태</label><input id="modal-bizType" data-supplier-f="bizType" type="text" value="${escapeHtml(s.bizType)}" /></div>
           <div class="field"><label for="modal-bizItem">종목</label><input id="modal-bizItem" data-supplier-f="bizItem" type="text" value="${escapeHtml(s.bizItem)}" /></div>
           <div class="field field-full"><label for="modal-address">소재지</label><textarea id="modal-address" data-supplier-f="address">${escapeHtml(s.address)}</textarea></div>
@@ -866,6 +905,11 @@ function supplierForUi(root) {
   return loadSupplierDefaults();
 }
 
+function supplierVatPercentFromUi(root) {
+  const r = String(supplierForUi(root).vatPercent ?? '').trim();
+  return r || '10';
+}
+
 function updateSupplierStrip(root) {
   const el = root.querySelector('#supplier-strip-summary');
   if (!el) return;
@@ -990,14 +1034,7 @@ function renderForm(root, state, onChange) {
       <td class="num"><input type="text" inputmode="decimal" data-f="unitPrice" data-preview-col="col-price" placeholder="0" value="${escapeHtml(state.lines[i].unitPrice)}" /></td>
       <td class="num computed" data-c="supply"></td>
       <td class="num line-vat-pack">
-        <div class="line-vat-pack-inner">
-          <span class="vat-money-val" data-c="vat"></span>
-          <span class="vat-separator" aria-hidden="true"></span>
-          <div class="vat-pct-wrap">
-            <input type="text" class="vat-percent-inp" data-f="vatPercent" data-preview-col="col-vat" inputmode="decimal" placeholder="10" title="부가세율(%)" aria-label="부가세율 퍼센트" value="${escapeHtml(state.lines[i].vatPercent ?? '10')}" />
-            <span class="vat-pct-suffix" aria-hidden="true">%</span>
-          </div>
-        </div>
+        <span class="vat-money-val" data-c="vat"></span>
       </td>
       <td class="num"><input type="text" inputmode="decimal" data-f="lineAmount" data-preview-col="col-amt" placeholder="0" value="" /></td>
       <td class="line-remove-cell">${state.lines.length > 1 ? lineRemoveButtonHtml() : ''}</td>
@@ -1013,12 +1050,23 @@ function renderForm(root, state, onChange) {
         <div class="workspace-main">
           <div class="panel panel-quote-compose">
             <div class="compose-panel-head-row">
-              <h2 class="compose-panel-title">작성 항목</h2>
+              <div class="compose-panel-title-wrap">
+                <input
+                  type="text"
+                  id="quoteSaveName"
+                  class="compose-panel-title-input"
+                  data-field="quoteSaveName"
+                  aria-label="견적 제목"
+                  placeholder="견적 제목 · 저장 시 이름으로 사용"
+                  autocomplete="off"
+                  spellcheck="false"
+                  value="${escapeHtml(quoteSaveInitial)}"
+                />
+              </div>
               <button type="button" class="btn btn-secondary btn-compose-new" id="btn-compose-new-quote" title="새 견적으로 시작"><span class="btn-compose-new-plus" aria-hidden="true">+</span> 새로 작성</button>
             </div>
 
             <section class="compose-section" aria-labelledby="compose-h-supplier">
-              <input type="hidden" id="quoteSaveName" data-field="quoteSaveName" value="${escapeHtml(quoteSaveInitial)}" />
               <div class="compose-section-head">
                 <h3 id="compose-h-supplier" class="compose-section-title">
                   <span class="compose-status-dot is-todo" data-compose-dot="header" role="img" aria-label="미작성"></span>
@@ -1146,7 +1194,7 @@ function renderForm(root, state, onChange) {
       const row = t.closest('[data-line-row]');
       if (row) {
         const qty = row.querySelector('[data-f="qty"]')?.value ?? '';
-        const vatPct = row.querySelector('[data-f="vatPercent"]')?.value ?? '10';
+        const vatPct = supplierVatPercentFromUi(root);
         const derived = deriveUnitPriceFromAmount(qty, vatPct, t.value);
         const unitInp = row.querySelector('[data-f="unitPrice"]');
         if (derived != null && unitInp) {
@@ -1259,14 +1307,7 @@ function renderForm(root, state, onChange) {
       <td class="num"><input type="text" inputmode="decimal" data-f="unitPrice" data-preview-col="col-price" placeholder="0" /></td>
       <td class="num computed" data-c="supply"></td>
       <td class="num line-vat-pack">
-        <div class="line-vat-pack-inner">
-          <span class="vat-money-val" data-c="vat"></span>
-          <span class="vat-separator" aria-hidden="true"></span>
-          <div class="vat-pct-wrap">
-            <input type="text" class="vat-percent-inp" data-f="vatPercent" data-preview-col="col-vat" inputmode="decimal" placeholder="10" title="부가세율(%)" aria-label="부가세율 퍼센트" value="10" />
-            <span class="vat-pct-suffix" aria-hidden="true">%</span>
-          </div>
-        </div>
+        <span class="vat-money-val" data-c="vat"></span>
       </td>
       <td class="num"><input type="text" inputmode="decimal" data-f="lineAmount" data-preview-col="col-amt" placeholder="0" value="" /></td>
       <td class="line-remove-cell"></td>`;
@@ -1327,10 +1368,10 @@ function renderForm(root, state, onChange) {
 function updateComputedCells(root) {
   const tbody = root.querySelector('#lines-body');
   if (!tbody) return;
+  const vatPct = supplierVatPercentFromUi(root);
   tbody.querySelectorAll('[data-line-row]').forEach((row) => {
     const qty = row.querySelector('[data-f="qty"]')?.value ?? '';
     const unit = row.querySelector('[data-f="unitPrice"]')?.value ?? '';
-    const vatPct = row.querySelector('[data-f="vatPercent"]')?.value ?? '10';
     const { supply, vat, amount } = lineComputed(qty, unit, vatPct);
     const sEl = row.querySelector('[data-c="supply"]');
     const vEl = row.querySelector('[data-c="vat"]');
@@ -1578,7 +1619,7 @@ function buildDashboardLinesTableHtml(lines) {
       <th class="num">수량</th>
       <th class="num">단가 <span class="dashboard-lines-th-sub">(VAT별도)</span></th>
       <th class="num">공급가액</th>
-      <th class="num">부가세</th>
+      <th class="num">부가세 ${vatColumnTitleSuffixHtml(lines, 'dashboard-lines-th-sub')}</th>
       <th class="num">금액</th>
     </tr></thead><tbody>${body}</tbody></table>`;
 }

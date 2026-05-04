@@ -1,0 +1,142 @@
+================================================================================
+  대시보드 카드 내 「품목 표 펼치기」 구현 메모
+  다른 프로젝트의 AI/개발자가 동일 패턴을 재구현할 때 사용 (UTF-8)
+================================================================================
+
+[1] 기능 요약 (무엇을 구현하면 되는지)
+--------------------------------------------------------------------------------
+- 저장된 견적 목록에서 **각 행은 카드 하나**로 보인다.
+- 카드 상단에는 저장 이름, 발송번호, 상태, 발행/저장 일시, 수정·삭제 버튼이 있다.
+- 카드 **하단**에는 접혀 있는 영역이 있고, 한 줄짜리 헤더만 보이다가 클릭하면 **품목
+  라인 테이블**(품명·수량·단가·공급가액·부가세·금액)이 펼쳐진다.
+- 네이티브 HTML `<details>` / `<summary>` 로 구현해 별도 JS 토글 없이 동작한다.
+- 견적 본문(JSON)을 불러오지 못한 카드(`err`)에는 펼치기 블록을 넣지 않는다.
+
+
+[2] 다른 AI에게 그대로 줄 수 있는 구현 프롬프트 (예시)
+--------------------------------------------------------------------------------
+아래 요구로 UI를 구현해 줘.
+
+1) 목록의 각 항목은 카드 레이아웃이고, 카드 아래에 접이식 영역을 둔다.
+2) 접이식 영역은 HTML `<details class="...">` 와 `<summary class="...">` 로 구현한다.
+   summary 텍스트는 "품목 표 펼치기" 같이 명확한 레이블을 쓴다.
+3) `<details>` 가 열리면(summary 아래) 견적 `lines` 배열로부터 만든 `<table>` 을
+   넣는다. 열: 품명, 수량, 단가(VAT별도 표기 가능), 공급가액, 부가세, 금액.
+4) 빈 행·의미 없는 행(품명·수량·단가 모두 비어 있고 금액도 0)은 테이블에서 제외한다.
+5) 테이블이 비면 `<p>` 로 "등록된 품목이 없습니다." 정도의 안내를 넣는다.
+6) 본문 로드 실패 시에는 펼치기 영역 자체를 렌더하지 않고 경고 문구만 카드에 남긴다.
+7) 스타일: summary 에 기본 삼각형 마커를 숨기고(::marker 또는 webkit), 오른쪽에
+   작은 화살표(chevron)를 CSS 의사 요소로 넣어 열림/닫힘 시 회전시킨다.
+   펼친 내용 영역은 살짝 다른 배경(예: 연한 그라데이션)과 패딩으로 카드 본문과 구분한다.
+8) 가로 스크롤: 테이블이 좁은 화면에서 잘리지 않도록 바깥에 `overflow-x: auto` 래퍼를 둔다.
+
+
+[3] 이 레포에서의 DOM 스켈레톤 (참고용 HTML 구조)
+--------------------------------------------------------------------------------
+카드 한 장 안에서 펼치기가 들어가는 부분만 발췌하면 다음과 같다.
+
+  <div class="dashboard-quote-card">
+    <div class="dashboard-floor-top">
+      ... 요약 행 (제목, 상태, 날짜, 버튼) ...
+    </div>
+    <details class="dashboard-lines-details">
+      <summary class="dashboard-lines-summary">
+        <span class="dashboard-lines-summary-text">품목 표 펼치기</span>
+      </summary>
+      <div class="dashboard-floor-bottom">
+        <div class="dashboard-lines-embed">
+          <!-- 여기에 lines 로 만든 table 또는 empty 문단 -->
+        </div>
+      </div>
+    </details>
+  </div>
+
+- 본문 로드 실패 시: 위 `<details>...</details>` 블록 전체를 출력하지 않음.
+
+
+[4] 데이터 소스 (lines 배열 스키마)
+--------------------------------------------------------------------------------
+저장된 견적 JSON 안의 `lines` 는 객체 배열이다. 각 원소 예:
+
+  {
+    "name": "",
+    "qty": "",
+    "unitPrice": "",
+    "vatPercent": "10"
+  }
+
+- 금액 계산은 **수량 × 단가 = 공급가액**, 부가세 = 공급가액 × (vatPercent/100) 반올림,
+  금액 = 공급가액 + 부가세 (이 레포의 app.js `lineComputed` 와 동일 규칙).
+- 표시 시 숫자는 천 단위 구분 등 로케일 포맷을 쓸 수 있다.
+
+
+[5] 테이블 HTML 생성 로직 요약 (의사코드)
+--------------------------------------------------------------------------------
+함수명 예: buildDashboardLinesTableHtml(lines)
+
+  if lines 비었음 → return '<p class="dashboard-lines-empty">등록된 품목이 없습니다.</p>'
+
+  rows = []
+  for l in lines:
+      supply, vat, amount = lineComputed(l.qty, l.unitPrice, l.vatPercent)
+      hasContent = 이름 비어있지 않거나 supply≠0 또는 수량·단가 파싱≠0
+      if not hasContent: continue
+      rows.push <tr> 품명, 수량, 단가, 공급가액(fmt), 부가세(fmt), 금액(fmt)
+
+  if rows 비었음 → return empty 메시지 paragraph
+
+  return '<table class="dashboard-lines-sheet"><thead>...</thead><tbody>' + rows + '</tbody></table>'
+
+헤더의 부가세 열 옆에 세율 힌트 `(%)` 또는 통일 세율 `(10%)` 등을 넣어도 된다
+(이 레포는 `vatColumnTitleSuffixHtml` 헬퍼 사용).
+
+
+[6] 목록 단계에서의 연결 (이 레포 app.js 흐름)
+--------------------------------------------------------------------------------
+1) `fetchDashboardServerRows` 가 `GET /quotes` 로 파일 목록을 받은 뒤, 각 파일에 대해
+   `GET /quotes/{fileName}` 으로 본문을 가져온다 (동시 요청 수 제한은 `mapPool` 등으로 조절).
+2) 각 항목 메타 객체에 `linesTableHtml: buildDashboardLinesTableHtml(data.lines || [])` 를 넣는다.
+3) `renderDashboardQuotesTable(wrap, metas)` 가 카드 HTML 문자열을 조립할 때
+   `m.err` 가 아니면 `bottomFloor` 에 위 [3]절의 `<details>...</details>` 를 넣고
+   `${m.linesTableHtml}` 을 `.dashboard-lines-embed` 안에 삽입한다.
+
+관련 식별자:
+  - buildDashboardLinesTableHtml   … 품목 테이블 문자열 생성
+  - renderDashboardQuotesTable     … 카드 + details 삽입
+  - fetchDashboardServerRows       … 본문 병렬 로드 후 metas 구성
+
+
+[7] 스타일 클래스 맵 (styles.css)
+--------------------------------------------------------------------------------
+이름                      역할
+-------------------------- --------------------------------------------------
+.dashboard-lines-details   details 래퍼; 상단 border 로 카드 상단과 구분
+.dashboard-lines-summary   summary 행; 호버 배경, flex, 화살표 ::after
+.dashboard-lines-summary-text
+                           레이블 텍스트 영역
+.dashboard-lines-details[open] .dashboard-lines-summary::after
+                           열렸을 때 화살표 회전(닫힘 45deg → 열림 -135deg)
+.dashboard-floor-bottom    펼친 본문 패딩·배경
+.dashboard-lines-embed     가로 스크롤 래퍼 (overflow-x: auto)
+.dashboard-lines-sheet     품목 테이블 본체 (min-width 등)
+.dashboard-lines-th-sub    헤더 보조 텍스트 (예: VAT별도)
+.dashboard-lines-empty     품목 없음 문단
+
+-webkit-details-marker 숨김은 `.dashboard-lines-summary::-webkit-details-marker`
+
+
+[8] 접근성·UX 참고
+--------------------------------------------------------------------------------
+- `<summary>` 에 포커스 가능; 키보드로 열고 닫기 가능(details 기본 동작).
+- 견적 수정/삭제 버튼은 펼치기와 형제로 두어 summary 클릭과 혼동되지 않게 카드 상단에 둔다.
+- 모바일에서는 테이블 min-width 로 인해 가로 스크롤이 생기므로 embed 래퍼가 중요하다.
+
+
+[9] 한 줄 요약
+--------------------------------------------------------------------------------
+「카드 아래에 `<details>` 로 접고, 열면 서버에서 받은 `lines` 로 만든 품목 `<table>` 을
+ 넣는다. 스타일은 summary 커스텀 화살표 + 안쪽 연한 배경 + 테이블 래퍼 가로 스크롤.」
+
+================================================================================
+문서 끝
+================================================================================

@@ -986,13 +986,36 @@ h1.app-title {
   border-bottom: 1px solid #e2e8f0;
 }
 
-.panel-quote-compose > .compose-panel-head-row .compose-panel-title {
+.compose-panel-title-wrap {
+  flex: 1;
+  min-width: 0;
+}
+
+.compose-panel-title-input {
+  display: block;
+  width: 100%;
   margin: 0;
+  padding: 4px 2px 8px;
+  box-sizing: border-box;
+  border: none;
+  border-bottom: 2px solid transparent;
+  border-radius: 0;
   font-size: 1.05rem;
   font-weight: 700;
   line-height: 1.35;
-  flex: 1;
-  min-width: 0;
+  color: #0f172a;
+  background: transparent;
+  font-family: inherit;
+}
+
+.compose-panel-title-input::placeholder {
+  font-weight: 600;
+  color: #94a3b8;
+}
+
+.compose-panel-title-input:focus {
+  outline: none;
+  border-bottom-color: var(--accent);
 }
 
 .btn.btn-compose-new {
@@ -1172,75 +1195,17 @@ h1.app-title {
 
 .items-editor td.line-vat-pack {
   vertical-align: middle;
-  padding: 4px 6px;
-}
-
-.line-vat-pack-inner {
-  display: flex;
-  align-items: stretch;
-  justify-content: flex-end;
-  gap: 8px;
-  min-width: 0;
+  padding: 6px 8px;
+  text-align: right;
 }
 
 .vat-money-val {
-  flex: 1;
-  min-width: 0;
+  display: block;
   font-size: 12px;
   font-weight: 600;
   color: #334155;
   text-align: right;
   white-space: nowrap;
-  align-self: center;
-}
-
-.vat-separator {
-  flex: 0 0 1px;
-  align-self: stretch;
-  min-height: 26px;
-  margin: 2px 0;
-  background: #cbd5e1;
-  border-radius: 1px;
-}
-
-.vat-pct-wrap {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  padding: 3px 8px 3px 6px;
-  border: 1px solid #cbd5e1;
-  border-radius: 8px;
-  background: #f8fafc;
-  align-self: center;
-}
-
-.vat-pct-wrap:focus-within {
-  border-color: #64748b;
-  box-shadow: 0 0 0 2px rgba(100, 116, 139, 0.18);
-}
-
-.vat-percent-inp {
-  flex: 0 0 2.25rem;
-  width: 2.25rem;
-  max-width: 100%;
-  padding: 4px 2px;
-  border: none;
-  border-radius: 4px;
-  font: inherit;
-  font-size: 12px;
-  text-align: center;
-  background: transparent;
-}
-
-.vat-percent-inp:focus {
-  outline: none;
-}
-
-.vat-pct-suffix {
-  font-size: 11px;
-  font-weight: 700;
-  color: #64748b;
 }
 
 .items-th-actions {
