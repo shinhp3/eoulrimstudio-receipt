@@ -410,6 +410,16 @@ function persistDraftFromDom() {
   }
 }
 
+/** 서버에서 연 견적 파일이 없을 때만 발행일을 오늘(로컬)로 맞춤 */
+function syncIssueDateToTodayIfEligible(root) {
+  if (!root || root._cloudQuoteFileName) return;
+  const inp = root.querySelector('[data-field="issueDate"]');
+  if (!inp) return;
+  const today = todayIsoDateLocal();
+  if (inp.value === today) return;
+  inp.value = today;
+}
+
 let dashboardQuotesInvalidateNext = true;
 let dashboardFetchGen = 0;
 let dashboardQuotesMetasCache = null;
@@ -1710,6 +1720,7 @@ function mountApp(mountEl, initialState, sessionMeta) {
 
   mountEl._quoteDirtyBaselineJson = null;
   renderForm(mountEl, state, refresh);
+  syncIssueDateToTodayIfEligible(mountEl);
   refresh();
   fitQuotePreview(mountEl);
   Promise.resolve(scheduleMaybeAssignDispatchNo(mountEl, refresh)).finally(() => {
@@ -2040,6 +2051,8 @@ function switchMainTab(which) {
     fetchDashboardServerRows();
   } else {
     const mountEl = document.getElementById('app');
+    syncIssueDateToTodayIfEligible(mountEl);
+    mountEl?._quoteInputHandler?.();
     if (mountEl && mountEl.querySelector('#quote-fit-stage')) {
       requestAnimationFrame(() => {
         requestAnimationFrame(() => fitQuotePreview(mountEl));
@@ -2079,6 +2092,14 @@ function initMainTabs() {
     window.__eoulrimDraftPersistBound = true;
     document.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden') persistDraftFromDom();
+      else if (document.visibilityState === 'visible') {
+        const pw = document.getElementById('panel-write');
+        const mountEl = document.getElementById('app');
+        if (pw?.classList.contains('tab-panel-active') && mountEl?.querySelector('#lines-body')) {
+          syncIssueDateToTodayIfEligible(mountEl);
+          mountEl._quoteInputHandler?.();
+        }
+      }
     });
     window.addEventListener('pagehide', () => persistDraftFromDom());
   }
