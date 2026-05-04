@@ -59,9 +59,7 @@
       <div class="dashboard-page dashboard-page-embedded">
         <div class="dashboard-header dashboard-header-compact">
           <h2 class="dashboard-title">대시보드</h2>
-          <p class="dashboard-lead">
-            서버에 저장된 견적을 열고, 상태(완료 / 미작성)를 확인할 수 있습니다.
-          </p>
+          <p class="dashboard-lead">저장 목록</p>
           <div class="dashboard-actions">
             <button type="button" class="btn btn-primary" id="btn-new-quote">
               새 견적 작성
@@ -76,9 +74,28 @@
 
         <section class="dashboard-section panel" aria-labelledby="server-heading">
           <h3 id="server-heading" class="dashboard-section-title">저장된 견적</h3>
-          <p class="dashboard-section-desc">
-            상태는 저장 시점 기준입니다(발송번호·공급자 상호·품목 충족 시 <strong>완료</strong>).
-          </p>
+          <div class="dashboard-quote-filters">
+            <div class="dashboard-filter-field dashboard-filter-field-search">
+              <label for="dashboard-dispatch-filter" class="dashboard-filter-label">검색</label>
+              <input
+                type="search"
+                id="dashboard-dispatch-filter"
+                class="dashboard-dispatch-filter"
+                placeholder="저장 이름 또는 발송번호 일부"
+                autocomplete="off"
+                spellcheck="false"
+              />
+            </div>
+            <div class="dashboard-filter-field dashboard-filter-field-sort">
+              <label for="dashboard-quote-sort" class="dashboard-filter-label">정렬</label>
+              <select id="dashboard-quote-sort" class="dashboard-issue-sort" aria-label="목록 정렬">
+                <option value="issue-desc">발행일 최신순</option>
+                <option value="issue-asc">발행일 오래된순</option>
+                <option value="saved-desc">저장 최신순</option>
+                <option value="saved-asc">저장 오래된순</option>
+              </select>
+            </div>
+          </div>
           <div id="server-table-wrap" class="dashboard-table-wrap"></div>
         </section>
       </div>

@@ -27,6 +27,8 @@ const SUPPLIER_FIELDS = [
   'bizItem',
   'contact',
   'phone',
+  'bankName',
+  'bankAccountNo',
 ];
 
 function defaultSupplier() {
@@ -39,17 +41,40 @@ function defaultSupplier() {
     bizItem: '',
     contact: '',
     phone: '',
+    bankName: '',
+    bankAccountNo: '',
+  };
+}
+
+/** 미리보기·저장 JSON용 한 줄 표시 */
+function formatBankAccountLine(bankName, bankAccountNo) {
+  const n = String(bankName ?? '').trim();
+  const a = String(bankAccountNo ?? '').trim();
+  if (n && a) return `${n} / ${a}`;
+  return n || a || '';
+}
+
+/** 예전 단일 필드(은행 / 계좌) 분리 */
+function splitLegacyBankAccountLine(combined) {
+  const s = String(combined ?? '').trim();
+  if (!s) return { bankName: '', bankAccountNo: '' };
+  const idx = s.indexOf('/');
+  if (idx === -1) return { bankName: '', bankAccountNo: s };
+  return {
+    bankName: s.slice(0, idx).trim(),
+    bankAccountNo: s.slice(idx + 1).trim(),
   };
 }
 
 function defaultState() {
   return {
     dispatchNo: '',
+    quoteSaveName: '',
     issueDate: new Date().toISOString().slice(0, 10),
     validityDays: '',
     bankAccount: '',
     notes: '',
-    lines: [{ name: '', qty: '', unitPrice: '' }],
+    lines: [{ name: '', qty: '', unitPrice: '', vatPercent: '10' }],
   };
 }
 
@@ -133,6 +158,33 @@ async function putCloudQuote(fileName, payload) {
   return res.json();
 }
 
+/** Worker가 저장소 전역 기준으로 부여하는 다음 RIM-{연도}-6자리무작위숫자 발송번호 */
+async function fetchNextDispatchNo() {
+  assertCloudApiConfigured();
+  const res = await cloudFetch('/quotes/next-dispatch');
+  if (!res.ok) {
+    throw new Error(`${await readWorkerError(res)} (${res.status})`);
+  }
+  const data = await res.json();
+  const no = String(data.dispatchNo || '').trim();
+  if (!no) throw new Error('발송번호를 받지 못했습니다.');
+  return no;
+}
+
+async function deleteCloudQuote(fileName) {
+  assertCloudApiConfigured();
+  const safe = encodeURIComponent(fileName);
+  const res = await cloudFetch(`/quotes/${safe}`, { method: 'DELETE' });
+  if (!res.ok) {
+    throw new Error(`${await readWorkerError(res)} (${res.status})`);
+  }
+  try {
+    return await res.json();
+  } catch {
+    return { ok: true };
+  }
+}
+
 /** 발송번호·공급자 상호·최소 1개 품목(품명 + 수량 또는 단가) 있으면 완료 */
 function isQuoteComplete(state) {
   if (!state || typeof state !== 'object') return false;
@@ -164,17 +216,32 @@ function cloudPayloadFromState(state) {
   const now = new Date().toISOString();
   const complete = isQuoteComplete(state);
   return {
-    quoteStorageVersion: 2,
+    quoteStorageVersion: 3,
     savedAt: now,
     serverSavedDate: now,
     quoteComplete: complete,
     quoteStatusLabel: complete ? '완료' : '미작성',
+    quoteSaveName: state.quoteSaveName ?? '',
     dispatchNo: state.dispatchNo ?? '',
     issueDate: state.issueDate ?? '',
     validityDays: state.validityDays ?? '',
-    bankAccount: state.bankAccount ?? '',
+    bankName: state.bankName ?? '',
+    bankAccountNo: state.bankAccountNo ?? '',
+    bankAccount:
+      formatBankAccountLine(state.bankName, state.bankAccountNo) ||
+      String(state.bankAccount ?? '').trim(),
     notes: state.notes ?? '',
-    lines: Array.isArray(state.lines) ? state.lines : [],
+    lines: Array.isArray(state.lines)
+      ? state.lines.map((l) => ({
+          name: l.name ?? '',
+          qty: l.qty ?? '',
+          unitPrice: l.unitPrice ?? '',
+          vatPercent:
+            l.vatPercent != null && String(l.vatPercent).trim() !== ''
+              ? String(l.vatPercent).trim()
+              : '10',
+        }))
+      : [],
     bizNo: state.bizNo ?? '',
     companyName: state.companyName ?? '',
     ceo: state.ceo ?? '',
@@ -195,20 +262,36 @@ function stateFromCloudPayload(parsed) {
           name: l.name ?? '',
           qty: l.qty ?? '',
           unitPrice: l.unitPrice ?? '',
+          vatPercent:
+            l.vatPercent != null && String(l.vatPercent).trim() !== ''
+              ? String(l.vatPercent).trim()
+              : '10',
         }))
       : base.lines;
+  const supplierRow = SUPPLIER_FIELDS.reduce((acc, k) => {
+    acc[k] = parsed[k] ?? '';
+    return acc;
+  }, {});
+  let bankName = String(supplierRow.bankName ?? '').trim();
+  let bankAccountNo = String(supplierRow.bankAccountNo ?? '').trim();
+  const bankAccount = parsed.bankAccount ?? '';
+  if (!bankName && !bankAccountNo && String(bankAccount).trim()) {
+    const sp = splitLegacyBankAccountLine(bankAccount);
+    bankName = sp.bankName;
+    bankAccountNo = sp.bankAccountNo;
+  }
   return {
     ...base,
+    quoteSaveName: parsed.quoteSaveName ?? '',
     dispatchNo: parsed.dispatchNo ?? '',
     issueDate: parsed.issueDate ?? base.issueDate,
     validityDays: parsed.validityDays ?? '',
-    bankAccount: parsed.bankAccount ?? '',
+    bankAccount,
     notes: parsed.notes ?? '',
     lines,
-    ...SUPPLIER_FIELDS.reduce((acc, k) => {
-      acc[k] = parsed[k] ?? '';
-      return acc;
-    }, {}),
+    ...supplierRow,
+    bankName,
+    bankAccountNo,
   };
 }
 
